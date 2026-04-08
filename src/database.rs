@@ -654,6 +654,10 @@ impl Drop for Database {
     }
 }
 
+// CBLDatabase is thread-safe per the CouchbaseLite C API contract.
+unsafe impl Send for Database {}
+unsafe impl Sync for Database {}
+
 impl Clone for Database {
     fn clone(&self) -> Self {
         Self::reference(self.get_ref())
