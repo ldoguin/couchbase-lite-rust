@@ -1206,3 +1206,39 @@ pub enum Direction {
     Pulled,
     Pushed,
 }
+
+// ── Enterprise extensions ─────────────────────────────────────────────────────
+
+#[cfg(feature = "enterprise")]
+impl Authenticator {
+    /// Creates an authenticator that presents a client TLS certificate to the
+    /// server during the SSL/TLS handshake.
+    ///
+    /// Used for authenticating with `UrlEndpointListener`.
+    pub fn create_certificate(identity: &crate::tls_identity::TLSIdentity) -> Self {
+        use crate::c_api::CBLAuth_CreateCertificate;
+        unsafe {
+            Self {
+                cbl_ref: CBLAuth_CreateCertificate(identity.get_ref()),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "enterprise")]
+impl Replicator {
+    /// Returns the TLS certificate presented by the server during the last
+    /// connection, or `None` if no TLS was used (e.g. local-DB replication).
+    pub fn server_certificate(&self) -> Option<crate::tls_identity::Cert> {
+        use crate::c_api::CBLReplicator_ServerCertificate;
+        unsafe {
+            let ptr = CBLReplicator_ServerCertificate(self.get_ref());
+            if ptr.is_null() {
+                None
+            } else {
+                // CBLReplicator_ServerCertificate returns a new reference.
+                Some(crate::tls_identity::Cert::take_ownership(ptr))
+            }
+        }
+    }
+}
