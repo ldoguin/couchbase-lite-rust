@@ -5,6 +5,7 @@ use crate::{
         CBLDatabase_CreateValueIndex, CBLCollection_CreateValueIndex, CBLCollection_DeleteIndex,
         CBLCollection_GetIndexNames, CBLCollection_CreateArrayIndex, CBLArrayIndexConfiguration,
         CBLQueryIndex, CBLQueryIndex_Name, CBLQueryIndex_Collection, CBLCollection_GetIndex,
+        CBLFullTextIndexConfiguration, CBLCollection_CreateFullTextIndex,
     },
     error::{Error, Result, failure},
     slice::{from_str, from_c_str, Slice},
@@ -134,6 +135,70 @@ impl ArrayIndexConfiguration {
     }
 }
 
+/// Full-Text Search Index Configuration.
+///
+/// Configures a full-text index on one or more document properties. The index
+/// enables `MATCH()` queries and optionally applies language-specific stemming
+/// and stop-word removal.
+pub struct FullTextIndexConfiguration {
+    cbl_ref: CBLFullTextIndexConfiguration,
+    // Keep slices alive for the duration of the config's use.
+    _expressions: Slice<CString>,
+    _language: Slice<CString>,
+    _where: Slice<CString>,
+}
+
+impl CblRef for FullTextIndexConfiguration {
+    type Output = CBLFullTextIndexConfiguration;
+    fn get_ref(&self) -> Self::Output {
+        self.cbl_ref
+    }
+}
+
+impl FullTextIndexConfiguration {
+    /// Create a Full-Text Search Index Configuration.
+    ///
+    /// - `query_language`: The language used in `expressions` (N1QL or JSON).
+    /// - `expressions`: Comma-delimited property paths to index (N1QL) or a
+    ///   JSON array of expressions.
+    /// - `ignore_accents`: When `true`, diacritical marks are ignored during
+    ///   matching. Defaults to `false`.
+    /// - `language`: Optional ISO-639 language code (e.g. `"en"`, `"fr"`) that
+    ///   enables stemming and stop-word removal. Pass `None` to disable.
+    /// - `where_`: Optional predicate expression for a partial index.
+    pub fn new(
+        query_language: QueryLanguage,
+        expressions: &str,
+        ignore_accents: bool,
+        language: Option<&str>,
+        where_: Option<&str>,
+    ) -> Result<Self> {
+        let expressions_c = CString::new(expressions)
+            .map_err(|_| Error::cbl_error(CouchbaseLiteError::InvalidParameter))?;
+        let language_c = CString::new(language.unwrap_or(""))
+            .map_err(|_| Error::cbl_error(CouchbaseLiteError::InvalidParameter))?;
+        let where_c = CString::new(where_.unwrap_or(""))
+            .map_err(|_| Error::cbl_error(CouchbaseLiteError::InvalidParameter))?;
+
+        let expressions_s = from_c_str(expressions_c, expressions.len());
+        let language_s = from_c_str(language_c, language.map_or(0, |l| l.len()));
+        let where_s = from_c_str(where_c, where_.map_or(0, |w| w.len()));
+
+        Ok(Self {
+            cbl_ref: CBLFullTextIndexConfiguration {
+                expressionLanguage: query_language as u32,
+                expressions: expressions_s.get_ref(),
+                ignoreAccents: ignore_accents,
+                language: language_s.get_ref(),
+                where_: where_s.get_ref(),
+            },
+            _expressions: expressions_s,
+            _language: language_s,
+            _where: where_s,
+        })
+    }
+}
+
 /// QueryIndex represents an existing index in a collection.
 /// The QueryIndex can be used to obtain
 /// a IndexUpdater object for updating the vector index in lazy mode.
@@ -239,6 +304,32 @@ impl Collection {
         let slice = from_str(name);
         let r = unsafe {
             CBLCollection_CreateValueIndex(
+                self.get_ref(),
+                slice.get_ref(),
+                config.get_ref(),
+                &mut err,
+            )
+        };
+        if !err {
+            return Ok(r);
+        }
+        failure(err)
+    }
+
+    /// Creates a full-text search index in the collection.
+    ///
+    /// If an identical index with that name already exists, nothing happens.
+    /// If a non-identical index with that name already exists, it is deleted
+    /// and re-created.
+    pub fn create_full_text_index(
+        &self,
+        name: &str,
+        config: &FullTextIndexConfiguration,
+    ) -> Result<bool> {
+        let mut err = CBLError::default();
+        let slice = from_str(name);
+        let r = unsafe {
+            CBLCollection_CreateFullTextIndex(
                 self.get_ref(),
                 slice.get_ref(),
                 config.get_ref(),
