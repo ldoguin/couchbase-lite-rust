@@ -261,7 +261,7 @@ impl CblRef for ProxySettings {
 }
 
 /** A callback that can decide whether a particular document should be pushed or pulled. */
-pub type ReplicationFilter = Box<dyn Fn(&Document, bool, bool) -> bool>;
+pub type ReplicationFilter = Box<dyn Fn(&Document, bool, bool) -> bool + Send>;
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn c_replication_push_filter(
@@ -305,7 +305,7 @@ when the replicator finds a newer server-side revision of a document that also h
 changes. The local and remote changes must be resolved before the document can be pushed
 to the server. */
 pub type ConflictResolver =
-    Box<dyn Fn(&str, Option<Document>, Option<Document>) -> Option<Document>>;
+    Box<dyn Fn(&str, Option<Document>, Option<Document>) -> Option<Document> + Send>;
 
 unsafe extern "C" fn c_replication_conflict_resolver(
     context: *mut ::std::os::raw::c_void,
@@ -765,6 +765,15 @@ pub struct Replicator {
     pub document_listeners: ReplicatorsListeners<ReplicatedDocumentListener>,
 }
 
+// SAFETY: CBLReplicator is documented as thread-safe for all operations used
+// across threads (CBLReplicator_Start, CBLReplicator_Stop, CBLReplicator_Status,
+// CBLReplicator_AddChangeListener). The raw pointer fields (cbl_ref, MutableDict,
+// MutableArray, ListenerToken) wrap C objects whose reference-counting and mutation
+// are protected by CBL's internal locks. The closure fields (change_listeners,
+// document_listeners, context) are now bounded by + Send on their type aliases,
+// ensuring any closures stored here are themselves Send.
+unsafe impl Send for Replicator {}
+
 impl CblRef for Replicator {
     type Output = *mut CBLReplicator;
     fn get_ref(&self) -> Self::Output {
@@ -1128,7 +1137,7 @@ impl From<CBLReplicatorStatus> for ReplicatorStatus {
 }
 
 /** A callback that notifies you when the replicator's status changes. */
-pub type ReplicatorChangeListener = Box<dyn Fn(ReplicatorStatus)>;
+pub type ReplicatorChangeListener = Box<dyn Fn(ReplicatorStatus) + Send>;
 #[unsafe(no_mangle)]
 unsafe extern "C" fn c_replicator_change_listener(
     context: *mut ::std::os::raw::c_void,
