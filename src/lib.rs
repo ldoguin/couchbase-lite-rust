@@ -45,10 +45,18 @@ pub mod fleece;
 pub mod fleece_mutable;
 pub mod index;
 pub mod logging;
+#[cfg(feature = "enterprise")]
+pub mod prediction;
 pub mod query;
 pub mod replicator;
 pub mod scope;
 pub mod slice;
+#[cfg(feature = "enterprise")]
+pub mod tls_identity;
+#[cfg(feature = "enterprise")]
+pub mod url_endpoint_listener;
+#[cfg(feature = "enterprise")]
+pub mod vector_index;
 
 mod c_api;
 
@@ -70,6 +78,19 @@ pub use fleece::*;
 pub use fleece_mutable::*;
 pub use query::*;
 pub use replicator::*;
+#[cfg(feature = "enterprise")]
+pub use prediction::{register_predictive_model, unregister_predictive_model, PredictiveModel};
+#[cfg(feature = "enterprise")]
+pub use tls_identity::{Cert, KeyPair, TLSIdentity};
+#[cfg(feature = "enterprise")]
+pub use url_endpoint_listener::{
+    ConnectionStatus, ListenerAuthenticator, ListenerConfiguration, UrlEndpointListener,
+};
+#[cfg(feature = "enterprise")]
+pub use vector_index::{
+    enable_vector_search, DistanceMetric, IndexUpdater, ScalarQuantizerType,
+    VectorEncoding, VectorIndexConfiguration,
+};
 
 //////// TOP-LEVEL TYPES:
 

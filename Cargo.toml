@@ -48,10 +48,15 @@ incremental = false
 
 [features]
 # Enable this feature for Enterprise edition capabilities:
-# - Database encryption
+# - Database encryption (EncryptionKey, change_encryption_key)
 # - P2P replication (local database endpoints)
-# - Document property encryption/decryption during replication
-# - TLS identity management
+# - Document property encryption/decryption during replication (Encryptable)
+# - TLS identity management (Cert, KeyPair, TLSIdentity)
+# - URL endpoint listener for peer-to-peer sync (UrlEndpointListener)
+# - Vector search indexes (VectorIndexConfiguration, IndexUpdater)
+# - Predictive queries (PredictiveModel, register/unregister)
+# - Certificate-based replication auth (Authenticator::create_certificate)
+# - Server certificate inspection (Replicator::server_certificate)
 enterprise = []
 
 unsafe-threads-test = []
