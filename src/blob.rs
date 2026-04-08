@@ -74,6 +74,8 @@ impl Blob {
             if blob.is_null() {
                 None
             } else {
+                // Retain so that Drop::drop can safely release
+                retain(blob as *mut CBLBlob);
                 Some(Self { cbl_ref: blob })
             }
         }
