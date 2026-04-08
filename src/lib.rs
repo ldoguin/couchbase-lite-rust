@@ -103,6 +103,11 @@ impl Timestamp {
             timestamp: self.timestamp + duration.as_millis() as i64,
         }
     }
+
+    /// Returns the timestamp as milliseconds since the Unix epoch.
+    pub fn get(&self) -> i64 {
+        self.timestamp
+    }
 }
 
 pub struct Listener<T> {

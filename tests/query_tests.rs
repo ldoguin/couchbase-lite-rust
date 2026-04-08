@@ -427,3 +427,46 @@ fn array_index() {
         assert!(result.next().is_none());
     })
 }
+
+// set_parameters() re-binds query parameters between executions.
+//
+// Row values must be consumed within the ResultSet iterator — Row stores a raw
+// pointer to the ResultSet and has no lifetime bound, so collecting Row values
+// into a Vec produces dangling pointers once the ResultSet is dropped.
+// We therefore read each row's value inline during iteration.
+#[test]
+fn query_set_parameters_rebind() {
+    utils::with_db(|db| {
+        utils::add_doc(db, "doc-1", 1, "one");
+        utils::add_doc(db, "doc-2", 2, "two");
+        utils::add_doc(db, "doc-3", 3, "three");
+
+        let query = Query::new(
+            db,
+            QueryLanguage::N1QL,
+            "SELECT i FROM _ WHERE i = $i64 ORDER BY i",
+        )
+        .expect("create query");
+
+        let mut params = MutableDict::new();
+        params.at("i64").put_i64(2);
+        query.set_parameters(&params);
+
+        // Consume rows inline — do not collect into Vec<Row>.
+        let mut rs = query.execute().expect("execute");
+        let row = rs.next().expect("one row");
+        assert_eq!(row.get(0).as_i64_or_0(), 2);
+        assert!(rs.next().is_none());
+        drop(rs);
+
+        // Re-bind and verify the new value is used.
+        let mut params2 = MutableDict::new();
+        params2.at("i64").put_i64(3);
+        query.set_parameters(&params2);
+
+        let mut rs2 = query.execute().expect("execute");
+        let row2 = rs2.next().expect("one row");
+        assert_eq!(row2.get(0).as_i64_or_0(), 3);
+        assert!(rs2.next().is_none());
+    });
+}
