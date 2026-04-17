@@ -137,6 +137,9 @@ fn vector_index_create_and_query() {
         let mut results = query.execute().expect("execute query");
         let row = results.next().expect("expected at least one result row");
         let id = row.get(0).as_string().unwrap_or_default().to_string();
-        assert_eq!(id, "vec_0", "nearest neighbour to [1,0,0,0] should be vec_0");
+        assert_eq!(
+            id, "vec_0",
+            "nearest neighbour to [1,0,0,0] should be vec_0"
+        );
     });
 }

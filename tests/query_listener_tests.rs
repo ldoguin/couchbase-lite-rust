@@ -16,12 +16,8 @@ fn query_column_names_matches_individual() {
     let _leak_checker = LeakChecker::new();
 
     utils::with_db(|db| {
-        let query = Query::new(
-            db,
-            QueryLanguage::N1QL,
-            "SELECT i, s FROM _ ORDER BY i",
-        )
-        .expect("create query");
+        let query = Query::new(db, QueryLanguage::N1QL, "SELECT i, s FROM _ ORDER BY i")
+            .expect("create query");
 
         let names = query.column_names();
         assert_eq!(names.len(), query.column_count());
@@ -43,8 +39,7 @@ fn query_column_names_select_star() {
     let _leak_checker = LeakChecker::new();
 
     utils::with_db(|db| {
-        let query = Query::new(db, QueryLanguage::N1QL, "SELECT * FROM _")
-            .expect("create query");
+        let query = Query::new(db, QueryLanguage::N1QL, "SELECT * FROM _").expect("create query");
 
         let names = query.column_names();
         assert_eq!(names.len(), 1);
@@ -72,12 +67,8 @@ fn query_add_listener_fires_on_registration() {
         add_doc(db, "doc-1", 1, "one");
         add_doc(db, "doc-2", 2, "two");
 
-        let mut query = Query::new(
-            db,
-            QueryLanguage::N1QL,
-            "SELECT i FROM _ ORDER BY i",
-        )
-        .expect("create query");
+        let mut query = Query::new(db, QueryLanguage::N1QL, "SELECT i FROM _ ORDER BY i")
+            .expect("create query");
 
         let row_count: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
         let row_count_clone = Arc::clone(&row_count);
@@ -116,12 +107,8 @@ fn query_listener_stops_after_drop() {
     utils::with_db(|db| {
         add_doc(db, "base", 0, "base");
 
-        let mut query = Query::new(
-            db,
-            QueryLanguage::N1QL,
-            "SELECT i FROM _ ORDER BY i",
-        )
-        .expect("create query");
+        let mut query = Query::new(db, QueryLanguage::N1QL, "SELECT i FROM _ ORDER BY i")
+            .expect("create query");
 
         let fired: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
         let fired_clone = Arc::clone(&fired);
@@ -166,12 +153,8 @@ fn query_copy_current_results_matches_execute() {
         add_doc(db, "b", 20, "beta");
         add_doc(db, "c", 30, "gamma");
 
-        let mut query = Query::new(
-            db,
-            QueryLanguage::N1QL,
-            "SELECT i FROM _ ORDER BY i",
-        )
-        .expect("create query");
+        let mut query = Query::new(db, QueryLanguage::N1QL, "SELECT i FROM _ ORDER BY i")
+            .expect("create query");
 
         let snapshot: Arc<Mutex<Vec<i64>>> = Arc::new(Mutex::new(Vec::new()));
         let snapshot_clone = Arc::clone(&snapshot);

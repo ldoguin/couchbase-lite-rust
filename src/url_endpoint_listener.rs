@@ -5,15 +5,14 @@
 use crate::{
     CblRef,
     c_api::{
-        CBLCert, CBLCollection, CBLConnectionStatus, CBLError,
-        CBLListenerAuth_CreateCertificate, CBLListenerAuth_CreateCertificateWithRootCerts,
-        CBLListenerAuth_CreatePassword, CBLListenerAuth_Free, CBLListenerAuthenticator,
-        CBLListenerCertAuthCallback, CBLListenerPasswordAuthCallback,
-        CBLTLSIdentity, CBLURLEndpointListener, CBLURLEndpointListener_Create,
-        CBLURLEndpointListener_Port, CBLURLEndpointListener_Start,
-        CBLURLEndpointListener_Status, CBLURLEndpointListener_Stop,
-        CBLURLEndpointListener_TLSIdentity, CBLURLEndpointListener_Urls,
-        CBLURLEndpointListenerConfiguration, FLArray_Count, FLArray_Get, FLValue_Release,
+        CBLCert, CBLCollection, CBLConnectionStatus, CBLError, CBLListenerAuth_CreateCertificate,
+        CBLListenerAuth_CreateCertificateWithRootCerts, CBLListenerAuth_CreatePassword,
+        CBLListenerAuth_Free, CBLListenerAuthenticator, CBLListenerCertAuthCallback,
+        CBLListenerPasswordAuthCallback, CBLURLEndpointListener, CBLURLEndpointListener_Create,
+        CBLURLEndpointListener_Port, CBLURLEndpointListener_Start, CBLURLEndpointListener_Status,
+        CBLURLEndpointListener_Stop, CBLURLEndpointListener_TLSIdentity,
+        CBLURLEndpointListener_Urls, CBLURLEndpointListenerConfiguration, FLArray_Count,
+        FLArray_Get, FLValue_Release,
     },
     collection::Collection,
     error::{Result, failure},
@@ -50,8 +49,7 @@ impl ListenerAuthenticator {
             password: crate::c_api::FLString,
         ) -> bool {
             unsafe {
-                let cb = &*(context
-                    as *const Box<dyn Fn(String, String) -> bool + Send + Sync>);
+                let cb = &*(context as *const Box<dyn Fn(String, String) -> bool + Send + Sync>);
                 let u = username.to_string().unwrap_or_default();
                 let p = password.to_string().unwrap_or_default();
                 cb(u, p)
@@ -65,17 +63,14 @@ impl ListenerAuthenticator {
 
     /// Accepts any client certificate (no verification).
     pub fn certificate() -> Self {
-        let auth_cb: CBLListenerCertAuthCallback =
-            Some(c_accept_any_cert);
+        let auth_cb: CBLListenerCertAuthCallback = Some(c_accept_any_cert);
         let ptr = unsafe { CBLListenerAuth_CreateCertificate(auth_cb, ptr::null_mut()) };
         Self { cbl_ref: ptr }
     }
 
     /// Accepts client certificates that chain to the given root certificate.
     pub fn certificate_with_root_certs(root_certs: Cert) -> Self {
-        let ptr = unsafe {
-            CBLListenerAuth_CreateCertificateWithRootCerts(root_certs.get_ref())
-        };
+        let ptr = unsafe { CBLListenerAuth_CreateCertificateWithRootCerts(root_certs.get_ref()) };
         Self { cbl_ref: ptr }
     }
 }
@@ -96,6 +91,7 @@ impl Drop for ListenerAuthenticator {
 // ── ListenerConfiguration ─────────────────────────────────────────────────────
 
 /// Configuration for a `UrlEndpointListener`.
+#[derive(Default)]
 pub struct ListenerConfiguration {
     /// Collections to expose for replication.
     pub collections: Vec<Collection>,
@@ -111,20 +107,6 @@ pub struct ListenerConfiguration {
     pub read_only: bool,
     /// Enable delta sync.
     pub enable_delta_sync: bool,
-}
-
-impl Default for ListenerConfiguration {
-    fn default() -> Self {
-        Self {
-            collections: vec![],
-            port: 0,
-            network_interface: None,
-            tls_identity: None,
-            authenticator: None,
-            read_only: false,
-            enable_delta_sync: false,
-        }
-    }
 }
 
 // ── ConnectionStatus ──────────────────────────────────────────────────────────
@@ -164,11 +146,8 @@ impl UrlEndpointListener {
     /// Creates a new listener with the given configuration.
     pub fn new(config: ListenerConfiguration) -> Result<Self> {
         // Build a contiguous array of raw collection pointers.
-        let mut collection_ptrs: Vec<*mut CBLCollection> = config
-            .collections
-            .iter()
-            .map(|c| c.get_ref())
-            .collect();
+        let mut collection_ptrs: Vec<*mut CBLCollection> =
+            config.collections.iter().map(|c| c.get_ref()).collect();
 
         let network_interface_slice = config
             .network_interface
@@ -269,7 +248,9 @@ impl UrlEndpointListener {
             let count = FLArray_Count(arr_const);
             let mut urls = Vec::with_capacity(count as usize);
             for i in 0..count {
-                let val = Value { cbl_ref: FLArray_Get(arr_const, i) };
+                let val = Value {
+                    cbl_ref: FLArray_Get(arr_const, i),
+                };
                 if let Some(s) = val.as_string() {
                     urls.push(s.to_string());
                 }

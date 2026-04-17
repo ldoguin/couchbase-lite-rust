@@ -88,8 +88,8 @@ pub use url_endpoint_listener::{
 };
 #[cfg(feature = "enterprise")]
 pub use vector_index::{
-    enable_vector_search, DistanceMetric, IndexUpdater, ScalarQuantizerType,
-    VectorEncoding, VectorIndexConfiguration,
+    enable_vector_search, DistanceMetric, IndexUpdater, ScalarQuantizerType, VectorEncoding,
+    VectorIndexConfiguration,
 };
 
 //////// TOP-LEVEL TYPES:

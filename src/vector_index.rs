@@ -11,9 +11,9 @@ use crate::{
         CBLQueryIndex_BeginUpdate, CBLVectorEncoding, CBLVectorEncoding_CreateNone,
         CBLVectorEncoding_CreateProductQuantizer, CBLVectorEncoding_CreateScalarQuantizer,
         CBLVectorEncoding_Free, CBLVectorIndexConfiguration, CBL_EnableVectorSearch,
-        kCBLDistanceMetricCosine, kCBLDistanceMetricDot,
-        kCBLDistanceMetricEuclidean, kCBLDistanceMetricEuclideanSquared,
-        kCBLSQ4, kCBLSQ6, kCBLSQ8, CBLCollection_CreateVectorIndex,
+        kCBLDistanceMetricCosine, kCBLDistanceMetricDot, kCBLDistanceMetricEuclidean,
+        kCBLDistanceMetricEuclideanSquared, kCBLSQ4, kCBLSQ6, kCBLSQ8,
+        CBLCollection_CreateVectorIndex,
     },
     collection::Collection,
     error::{Result, failure},
@@ -22,7 +22,6 @@ use crate::{
     release,
     slice::from_str,
 };
-use std::ptr;
 
 // ── enable_vector_search ──────────────────────────────────────────────────────
 
@@ -75,9 +74,10 @@ impl VectorEncoding {
                 VectorEncoding::ScalarQuantizer(t) => {
                     CBLVectorEncoding_CreateScalarQuantizer(*t as u32)
                 }
-                VectorEncoding::ProductQuantizer { subquantizers, bits } => {
-                    CBLVectorEncoding_CreateProductQuantizer(*subquantizers, *bits)
-                }
+                VectorEncoding::ProductQuantizer {
+                    subquantizers,
+                    bits,
+                } => CBLVectorEncoding_CreateProductQuantizer(*subquantizers, *bits),
             }
         }
     }
@@ -146,11 +146,7 @@ impl Collection {
     ///
     /// If an identical index already exists, this is a no-op.
     /// If a different index with the same name exists, it is replaced.
-    pub fn create_vector_index(
-        &self,
-        name: &str,
-        config: &VectorIndexConfiguration,
-    ) -> Result<()> {
+    pub fn create_vector_index(&self, name: &str, config: &VectorIndexConfiguration) -> Result<()> {
         unsafe {
             let encoding_ptr = config.encoding.to_raw();
             let expr_slice = from_str(&config.expression);
@@ -180,11 +176,7 @@ impl Collection {
                 CBLVectorEncoding_Free(encoding_ptr);
             }
 
-            if ok {
-                Ok(())
-            } else {
-                failure(err)
-            }
+            if ok { Ok(()) } else { failure(err) }
         }
     }
 }
@@ -222,7 +214,9 @@ impl IndexUpdater {
 
     /// Returns the Fleece value at `index` whose vector needs to be computed.
     pub fn value(&self, index: usize) -> Value {
-        Value { cbl_ref: unsafe { CBLIndexUpdater_Value(self.cbl_ref, index) } }
+        Value {
+            cbl_ref: unsafe { CBLIndexUpdater_Value(self.cbl_ref, index) },
+        }
     }
 
     /// Sets the computed vector for the entry at `index`.
@@ -236,11 +230,7 @@ impl IndexUpdater {
                 vector.len(),
                 &mut err,
             );
-            if ok {
-                Ok(())
-            } else {
-                failure(err)
-            }
+            if ok { Ok(()) } else { failure(err) }
         }
     }
 
@@ -258,11 +248,7 @@ impl IndexUpdater {
             let ok = CBLIndexUpdater_Finish(self.cbl_ref, &mut err);
             // Prevent Drop from double-releasing — the updater is consumed.
             std::mem::forget(self);
-            if ok {
-                Ok(())
-            } else {
-                failure(err)
-            }
+            if ok { Ok(()) } else { failure(err) }
         }
     }
 }

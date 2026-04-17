@@ -54,7 +54,12 @@ fn model_called_during_query() {
     }
 
     let model_name = "counter_model";
-    register_predictive_model(model_name, Counter { count: Arc::clone(&call_count) });
+    register_predictive_model(
+        model_name,
+        Counter {
+            count: Arc::clone(&call_count),
+        },
+    );
 
     utils::with_db(|db| {
         // Insert one document so the query has a row to process.
@@ -73,12 +78,7 @@ fn model_called_during_query() {
         let mut results = query.execute().expect("execute");
         let row = results.next().expect("expected one result row");
         let value = row.get(0).as_i64();
-        assert_eq!(
-            value,
-            Some(42),
-            "expected model output 42, got {:?}",
-            value
-        );
+        assert_eq!(value, Some(42), "expected model output 42, got {:?}", value);
     });
 
     assert!(
@@ -155,7 +155,9 @@ fn model_receives_input_fields() {
     let model_name = "inspector_model";
     register_predictive_model(
         model_name,
-        Inspector { received: Arc::clone(&received) },
+        Inspector {
+            received: Arc::clone(&received),
+        },
     );
 
     utils::with_db(|db| {
@@ -175,7 +177,12 @@ fn model_receives_input_fields() {
     });
 
     let got = *received.lock().unwrap();
-    assert_eq!(got, Some(99), "model should have received x=99, got {:?}", got);
+    assert_eq!(
+        got,
+        Some(99),
+        "model should have received x=99, got {:?}",
+        got
+    );
 
     unregister_predictive_model(model_name);
 }

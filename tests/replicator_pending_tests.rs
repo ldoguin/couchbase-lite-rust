@@ -36,22 +36,30 @@ fn pending_document_ids_before_and_after_push() {
         add_doc(local_db, "pending-1", 1, "one");
         add_doc(local_db, "pending-2", 2, "two");
 
-        let pending = repl
-            .pending_document_ids()
-            .expect("pending_document_ids");
-        assert!(pending.contains("pending-1"), "pending-1 not in set: {pending:?}");
-        assert!(pending.contains("pending-2"), "pending-2 not in set: {pending:?}");
+        let pending = repl.pending_document_ids().expect("pending_document_ids");
+        assert!(
+            pending.contains("pending-1"),
+            "pending-1 not in set: {pending:?}"
+        );
+        assert!(
+            pending.contains("pending-2"),
+            "pending-2 not in set: {pending:?}"
+        );
 
         assert!(
-            repl.is_document_pending("pending-1").expect("is_document_pending"),
+            repl.is_document_pending("pending-1")
+                .expect("is_document_pending"),
             "pending-1 should be pending"
         );
         assert!(
-            repl.is_document_pending("pending-2").expect("is_document_pending"),
+            repl.is_document_pending("pending-2")
+                .expect("is_document_pending"),
             "pending-2 should be pending"
         );
         assert!(
-            !repl.is_document_pending("nonexistent").expect("is_document_pending"),
+            !repl
+                .is_document_pending("nonexistent")
+                .expect("is_document_pending"),
             "nonexistent should not be pending"
         );
 
@@ -65,7 +73,10 @@ fn pending_document_ids_before_and_after_push() {
         );
 
         let after = repl.pending_document_ids().expect("pending after push");
-        assert!(after.is_empty(), "pending set should be empty after push, got: {after:?}");
+        assert!(
+            after.is_empty(),
+            "pending set should be empty after push, got: {after:?}"
+        );
     });
 }
 
@@ -88,7 +99,8 @@ fn is_document_pending_reflects_push_state() {
         add_doc(local_db, "pushed-doc", 42, "hello");
 
         assert!(
-            repl.is_document_pending("pushed-doc").expect("is_document_pending"),
+            repl.is_document_pending("pushed-doc")
+                .expect("is_document_pending"),
             "should be pending before push"
         );
 
@@ -102,7 +114,9 @@ fn is_document_pending_reflects_push_state() {
         );
 
         assert!(
-            !repl.is_document_pending("pushed-doc").expect("is_document_pending"),
+            !repl
+                .is_document_pending("pushed-doc")
+                .expect("is_document_pending"),
             "should not be pending after push"
         );
     });
@@ -164,8 +178,12 @@ fn document_listener_fires_on_push() {
         // Wait until both docs appear in the central DB.
         assert!(
             check_callback_with_wait(
-                || default_collection(central_db).get_document("ldoc-1").is_ok()
-                    && default_collection(central_db).get_document("ldoc-2").is_ok(),
+                || default_collection(central_db)
+                    .get_document("ldoc-1")
+                    .is_ok()
+                    && default_collection(central_db)
+                        .get_document("ldoc-2")
+                        .is_ok(),
                 Some(10)
             ),
             "docs did not replicate to central"
@@ -177,8 +195,14 @@ fn document_listener_fires_on_push() {
         );
 
         let ids = pushed_ids.lock().unwrap().clone();
-        assert!(ids.contains(&"ldoc-1".to_string()), "ldoc-1 not in pushed IDs: {ids:?}");
-        assert!(ids.contains(&"ldoc-2".to_string()), "ldoc-2 not in pushed IDs: {ids:?}");
+        assert!(
+            ids.contains(&"ldoc-1".to_string()),
+            "ldoc-1 not in pushed IDs: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"ldoc-2".to_string()),
+            "ldoc-2 not in pushed IDs: {ids:?}"
+        );
     });
 }
 
@@ -225,7 +249,13 @@ fn document_listener_fires_on_pull() {
         );
 
         let ids = pulled_ids.lock().unwrap().clone();
-        assert!(ids.contains(&"rdoc-1".to_string()), "rdoc-1 not in pulled IDs: {ids:?}");
-        assert!(ids.contains(&"rdoc-2".to_string()), "rdoc-2 not in pulled IDs: {ids:?}");
+        assert!(
+            ids.contains(&"rdoc-1".to_string()),
+            "rdoc-1 not in pulled IDs: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"rdoc-2".to_string()),
+            "rdoc-2 not in pulled IDs: {ids:?}"
+        );
     });
 }
