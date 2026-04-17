@@ -16,15 +16,15 @@
 //
 
 use crate::{
-    CblRef, Database, Dict, FleeceReference, Result, Slot, check_io, check_ptr, failure, release,
-    retain,
+    CblRef, Database, Dict, FleeceReference, MutableDict, Result, Slot, check_io, check_ptr,
+    failure, release, retain,
     slice::{from_bytes, from_str},
     c_api::{
         CBLBlob, CBLBlobReadStream, CBLBlobReader_Close, CBLBlobReader_Read, CBLBlobWriteStream,
         CBLBlobWriter_Close, CBLBlobWriter_Create, CBLBlobWriter_Write, CBLBlob_Content,
         CBLBlob_ContentType, CBLBlob_CreateWithData, CBLBlob_CreateWithStream, CBLBlob_Digest,
-        CBLBlob_Length, CBLBlob_OpenContentStream, CBLBlob_Properties, CBLError, FLDict_GetBlob,
-        FLSlot_SetBlob, FLValue_AsDict,
+        CBLBlob_Length, CBLBlob_OpenContentStream, CBLBlob_Properties, CBLDatabase_GetBlob,
+        CBLDatabase_SaveBlob, CBLError, FLDict_GetBlob, FLSlot_SetBlob, FLValue_AsDict,
     },
 };
 
@@ -124,6 +124,66 @@ impl Blob {
                 stream_ref: stream,
             },
         )
+    }
+
+    //////// DATABASE PERSISTENCE
+
+    /// Save this blob to the database standalone (without attaching to a document).
+    /// Returns the blob's digest string (e.g. `"sha1-abc123..."`).
+    pub fn save_to_database(&mut self, db: &Database) -> Result<String> {
+        unsafe {
+            let mut err = CBLError::default();
+            let ok = CBLDatabase_SaveBlob(db.get_ref(), self.get_ref() as *mut CBLBlob, &mut err);
+            if ok {
+                Ok(self.digest().to_string())
+            } else {
+                failure(err)
+            }
+        }
+    }
+
+    /// Delete a standalone blob from the database by compacting and verifying removal.
+    ///
+    /// Blobs that are not referenced by any document are removed when the database is
+    /// compacted (`MaintenanceType::Compact`). This method triggers that compaction and
+    /// then confirms the blob is gone.
+    ///
+    /// Returns `Ok(())` if the blob was removed.
+    /// Returns an error if the blob is still present after compaction (i.e. it is still
+    /// referenced by at least one document) or if the compact/get operations fail.
+    pub fn delete_from_database(db: &mut Database, digest: &str) -> Result<()> {
+        db.perform_maintenance(crate::database::MaintenanceType::Compact)?;
+        match Self::get_from_database(db, digest)? {
+            None => Ok(()),
+            Some(_) => Err(crate::error::Error::cbl_error(
+                crate::error::CouchbaseLiteError::NotFound,
+            )),
+        }
+    }
+
+    /// Retrieve a blob from the database by its SHA-1 digest string.
+    /// Returns `None` if no such blob exists.
+    pub fn get_from_database(db: &Database, digest: &str) -> Result<Option<Blob>> {
+        let mut props = MutableDict::new();
+        props.at("@type").put_string("blob");
+        props.at("digest").put_string(digest);
+        unsafe {
+            let mut err = CBLError::default();
+            let ptr = CBLDatabase_GetBlob(
+                db.get_ref(),
+                props.get_ref() as crate::c_api::FLDict,
+                &mut err,
+            );
+            if ptr.is_null() {
+                if err.code != 0 {
+                    failure(err)
+                } else {
+                    Ok(None)
+                }
+            } else {
+                Ok(Some(Blob { cbl_ref: ptr }))
+            }
+        }
     }
 }
 
