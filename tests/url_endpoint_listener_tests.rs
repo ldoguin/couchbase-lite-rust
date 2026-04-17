@@ -129,8 +129,8 @@ fn listener_with_tls_identity() {
         attrs.at("CN").put_string("listener-tls-test");
 
         let expiry = Timestamp::now().add(Duration::from_secs(86400));
-        let identity = TLSIdentity::create(true, &attrs, Some(expiry), None)
-            .expect("create TLS identity");
+        let identity =
+            TLSIdentity::create(true, &attrs, Some(expiry), None).expect("create TLS identity");
 
         let config = ListenerConfiguration {
             collections: vec![coll],
@@ -280,8 +280,8 @@ fn listener_tls_identity_some_when_enabled() {
         attrs.at("CN").put_string("tls-identity-test");
 
         let expiry = Timestamp::now().add(Duration::from_secs(86400));
-        let identity = TLSIdentity::create(true, &attrs, Some(expiry), None)
-            .expect("create TLS identity");
+        let identity =
+            TLSIdentity::create(true, &attrs, Some(expiry), None).expect("create TLS identity");
 
         let config = ListenerConfiguration {
             collections: vec![coll],
@@ -311,9 +311,8 @@ fn listener_with_password_authenticator() {
     utils::with_db(|db| {
         let coll = db.default_collection_or_error().unwrap();
 
-        let auth = ListenerAuthenticator::password(|user, pass| {
-            user == "alice" && pass == "secret"
-        });
+        let auth =
+            ListenerAuthenticator::password(|user, pass| user == "alice" && pass == "secret");
 
         let config = ListenerConfiguration {
             collections: vec![coll],

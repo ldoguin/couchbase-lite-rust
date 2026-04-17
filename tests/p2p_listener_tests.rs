@@ -38,8 +38,7 @@ fn has_doc(db: &Database, id: &str) -> bool {
 /// Build a `ReplicatorConfiguration` that connects `peer` to `url` (the listener).
 /// TLS is disabled so we can use plain `ws://`.
 fn peer_config(peer: &Database, url: &str) -> ReplicatorConfiguration {
-    let endpoint = Endpoint::new_with_url(url)
-        .unwrap_or_else(|e| panic!("endpoint {url}: {e}"));
+    let endpoint = Endpoint::new_with_url(url).unwrap_or_else(|e| panic!("endpoint {url}: {e}"));
     ReplicatorConfiguration {
         database: Some(peer.clone()),
         endpoint,
@@ -70,7 +69,9 @@ fn default_context() -> Box<ReplicationConfigurationContext> {
 fn wait_for(secs: u64, mut predicate: impl FnMut() -> bool) -> bool {
     let deadline = std::time::Instant::now() + Duration::from_secs(secs);
     while std::time::Instant::now() < deadline {
-        if predicate() { return true; }
+        if predicate() {
+            return true;
+        }
         thread::sleep(Duration::from_millis(100));
     }
     false
@@ -87,8 +88,8 @@ fn listener_doc_syncs_to_all_peers() {
     let tmp = tempdir::TempDir::new("p2p_test").unwrap();
 
     let listener_db = open_db("listener", tmp.path());
-    let peer1_db    = open_db("peer1",    tmp.path());
-    let peer2_db    = open_db("peer2",    tmp.path());
+    let peer1_db = open_db("peer1", tmp.path());
+    let peer2_db = open_db("peer2", tmp.path());
 
     // Start listener on an OS-assigned port.
     let coll = listener_db.default_collection_or_error().unwrap();
@@ -98,7 +99,8 @@ fn listener_doc_syncs_to_all_peers() {
         tls_identity: None,
         authenticator: None,
         ..Default::default()
-    }).expect("create listener");
+    })
+    .expect("create listener");
     listener.start().expect("start listener");
 
     let url = format!("ws://127.0.0.1:{}/listener", listener.port());
@@ -138,8 +140,8 @@ fn peer_doc_propagates_through_listener_to_other_peer() {
     let tmp = tempdir::TempDir::new("p2p_test").unwrap();
 
     let listener_db = open_db("listener", tmp.path());
-    let peer1_db    = open_db("peer1",    tmp.path());
-    let peer2_db    = open_db("peer2",    tmp.path());
+    let peer1_db = open_db("peer1", tmp.path());
+    let peer2_db = open_db("peer2", tmp.path());
 
     let coll = listener_db.default_collection_or_error().unwrap();
     let listener = UrlEndpointListener::new(ListenerConfiguration {
@@ -148,7 +150,8 @@ fn peer_doc_propagates_through_listener_to_other_peer() {
         tls_identity: None,
         authenticator: None,
         ..Default::default()
-    }).expect("create listener");
+    })
+    .expect("create listener");
     listener.start().expect("start listener");
 
     let url = format!("ws://127.0.0.1:{}/listener", listener.port());
@@ -190,8 +193,8 @@ fn docs_from_multiple_peers_cross_replicate() {
     let tmp = tempdir::TempDir::new("p2p_test").unwrap();
 
     let listener_db = open_db("listener", tmp.path());
-    let peer1_db    = open_db("peer1",    tmp.path());
-    let peer2_db    = open_db("peer2",    tmp.path());
+    let peer1_db = open_db("peer1", tmp.path());
+    let peer2_db = open_db("peer2", tmp.path());
 
     let coll = listener_db.default_collection_or_error().unwrap();
     let listener = UrlEndpointListener::new(ListenerConfiguration {
@@ -200,7 +203,8 @@ fn docs_from_multiple_peers_cross_replicate() {
         tls_identity: None,
         authenticator: None,
         ..Default::default()
-    }).expect("create listener");
+    })
+    .expect("create listener");
     listener.start().expect("start listener");
 
     let url = format!("ws://127.0.0.1:{}/listener", listener.port());
@@ -250,8 +254,8 @@ fn listener_connection_count_tracks_peers() {
     let tmp = tempdir::TempDir::new("p2p_test").unwrap();
 
     let listener_db = open_db("listener", tmp.path());
-    let peer1_db    = open_db("peer1",    tmp.path());
-    let peer2_db    = open_db("peer2",    tmp.path());
+    let peer1_db = open_db("peer1", tmp.path());
+    let peer2_db = open_db("peer2", tmp.path());
 
     let coll = listener_db.default_collection_or_error().unwrap();
     let listener = UrlEndpointListener::new(ListenerConfiguration {
@@ -260,7 +264,8 @@ fn listener_connection_count_tracks_peers() {
         tls_identity: None,
         authenticator: None,
         ..Default::default()
-    }).expect("create listener");
+    })
+    .expect("create listener");
     listener.start().expect("start listener");
 
     let url = format!("ws://127.0.0.1:{}/listener", listener.port());

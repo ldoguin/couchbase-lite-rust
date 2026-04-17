@@ -5,8 +5,8 @@
 use crate::{
     CblRef,
     c_api::{
-        CBLPredictiveModel, CBL_RegisterPredictiveModel, CBL_UnregisterPredictiveModel,
-        FLDict, FLMutableDict,
+        CBLPredictiveModel, CBL_RegisterPredictiveModel, CBL_UnregisterPredictiveModel, FLDict,
+        FLMutableDict,
     },
     fleece::Dict,
     fleece_mutable::MutableDict,
@@ -60,10 +60,7 @@ pub fn unregister_predictive_model(name: &str) {
 
 // ── C callbacks ───────────────────────────────────────────────────────────────
 
-unsafe extern "C" fn c_prediction(
-    context: *mut std::ffi::c_void,
-    input: FLDict,
-) -> FLMutableDict {
+unsafe extern "C" fn c_prediction(context: *mut std::ffi::c_void, input: FLDict) -> FLMutableDict {
     unsafe {
         let model = &*(context as *const Box<dyn PredictiveModel>);
         // Wrap the input FLDict as a borrowed Dict. The lifetime is tied to the

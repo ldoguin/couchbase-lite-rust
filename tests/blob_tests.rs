@@ -22,7 +22,9 @@ fn blob_from_value_retains_independently_of_document() {
         {
             let mut blob = Blob::new_from_data(data, content_type);
             let mut doc = Document::new_with_id("blob_doc");
-            doc.mutable_properties().at("attachment").put_blob(&mut blob);
+            doc.mutable_properties()
+                .at("attachment")
+                .put_blob(&mut blob);
             default_collection(db)
                 .save_document_with_concurency_control(&mut doc, ConcurrencyControl::FailOnConflict)
                 .expect("save");
@@ -280,7 +282,10 @@ fn blob_standalone_save_get_delete() {
         // Save standalone
         let mut blob = Blob::new_from_data(data, "text/plain");
         let digest = blob.save_to_database(db).expect("save_to_database");
-        assert!(digest.starts_with("sha1-"), "digest should be sha1-prefixed");
+        assert!(
+            digest.starts_with("sha1-"),
+            "digest should be sha1-prefixed"
+        );
 
         // Get back by digest
         let retrieved = Blob::get_from_database(db, &digest)
@@ -293,7 +298,10 @@ fn blob_standalone_save_get_delete() {
 
         // Confirm it is no longer retrievable
         let after = Blob::get_from_database(db, &digest).expect("get after delete");
-        assert!(after.is_none(), "blob should be gone after delete_from_database");
+        assert!(
+            after.is_none(),
+            "blob should be gone after delete_from_database"
+        );
     });
 }
 

@@ -15,8 +15,8 @@ fn tls_identity_create_server() {
     attrs.at("CN").put_string("test-server");
 
     let expiry = Timestamp::now().add(Duration::from_secs(86400));
-    let identity = TLSIdentity::create(true, &attrs, Some(expiry), None)
-        .expect("create server TLS identity");
+    let identity =
+        TLSIdentity::create(true, &attrs, Some(expiry), None).expect("create server TLS identity");
 
     let cert = identity.certificates();
     let subject = cert.subject_name();
@@ -38,8 +38,8 @@ fn tls_identity_create_client() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("test-client");
 
-    let identity = TLSIdentity::create(false, &attrs, None, None)
-        .expect("create client TLS identity");
+    let identity =
+        TLSIdentity::create(false, &attrs, None, None).expect("create client TLS identity");
 
     let cert = identity.certificates();
     let subject = cert.subject_name();
@@ -58,8 +58,7 @@ fn cert_data_der_non_empty() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("der-test");
 
-    let identity = TLSIdentity::create(true, &attrs, None, None)
-        .expect("create identity");
+    let identity = TLSIdentity::create(true, &attrs, None, None).expect("create identity");
 
     let cert = identity.certificates();
     let der = cert.data(false); // DER
@@ -73,8 +72,7 @@ fn cert_data_pem_has_header() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("pem-test");
 
-    let identity = TLSIdentity::create(true, &attrs, None, None)
-        .expect("create identity");
+    let identity = TLSIdentity::create(true, &attrs, None, None).expect("create identity");
 
     let cert = identity.certificates();
     let pem = cert.data(true);
@@ -93,8 +91,7 @@ fn cert_valid_timespan_ordering() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("timespan-test");
 
-    let identity = TLSIdentity::create(true, &attrs, None, None)
-        .expect("create identity");
+    let identity = TLSIdentity::create(true, &attrs, None, None).expect("create identity");
 
     let cert = identity.certificates();
     let (created, expires) = cert.valid_timespan();
@@ -113,8 +110,7 @@ fn cert_public_key_non_null() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("pubkey-test");
 
-    let identity = TLSIdentity::create(true, &attrs, None, None)
-        .expect("create identity");
+    let identity = TLSIdentity::create(true, &attrs, None, None).expect("create identity");
 
     let cert = identity.certificates();
     let key_pair = cert.public_key().expect("cert should have a public key");
@@ -133,8 +129,7 @@ fn tls_identity_with_key_pair_and_certs() {
     let mut attrs = MutableDict::new();
     attrs.at("CN").put_string("roundtrip");
 
-    let source = TLSIdentity::create(true, &attrs, None, None)
-        .expect("create source identity");
+    let source = TLSIdentity::create(true, &attrs, None, None).expect("create source identity");
 
     let cert = source.certificates();
     let key_pair = cert.public_key().expect("cert should have a public key");

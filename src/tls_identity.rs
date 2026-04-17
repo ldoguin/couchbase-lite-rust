@@ -6,8 +6,8 @@ use crate::{
     CblRef, MutableDict, Timestamp,
     c_api::{
         CBLCert, CBLCert_CertNextInChain, CBLCert_Data, CBLCert_PublicKey, CBLCert_SubjectName,
-        CBLCert_SubjectNameComponent, CBLCert_ValidTimespan, CBLCert_CreateWithData,
-        CBLError, CBLKeyPair, CBLKeyPair_CreateWithPrivateKeyData, CBLKeyPair_PrivateKeyData,
+        CBLCert_SubjectNameComponent, CBLCert_ValidTimespan, CBLCert_CreateWithData, CBLError,
+        CBLKeyPair, CBLKeyPair_CreateWithPrivateKeyData, CBLKeyPair_PrivateKeyData,
         CBLKeyPair_PublicKeyData, CBLKeyPair_PublicKeyDigest, CBLTLSIdentity,
         CBLTLSIdentity_Certificates, CBLTLSIdentity_CreateIdentity,
         CBLTLSIdentity_CreateIdentityWithKeyPair, CBLTLSIdentity_Expiration,
@@ -89,8 +89,7 @@ impl Cert {
     /// Returns a single component of the Subject Name identified by its OID key.
     pub fn subject_name_component(&self, oid: &str) -> Option<String> {
         unsafe {
-            let result =
-                CBLCert_SubjectNameComponent(self.cbl_ref, from_str(oid).get_ref());
+            let result = CBLCert_SubjectNameComponent(self.cbl_ref, from_str(oid).get_ref());
             result.to_string()
         }
     }
@@ -153,11 +152,7 @@ impl KeyPair {
                 .as_ref()
                 .map(|s| s.get_ref())
                 .unwrap_or(crate::slice::NULL_SLICE);
-            let ptr = CBLKeyPair_CreateWithPrivateKeyData(
-                key_slice.get_ref(),
-                pwd_ref,
-                &mut err,
-            );
+            let ptr = CBLKeyPair_CreateWithPrivateKeyData(key_slice.get_ref(), pwd_ref, &mut err);
             if ptr.is_null() {
                 return failure(err);
             }
