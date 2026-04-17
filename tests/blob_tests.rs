@@ -267,3 +267,63 @@ fn blob_reader_small_buffer() {
         assert_eq!(result, data);
     });
 }
+
+// ── standalone save / get / delete ───────────────────────────────────────────
+
+// save_to_database stores a blob without a document; get_from_database retrieves
+// it by digest; delete_from_database compacts and verifies removal.
+#[test]
+fn blob_standalone_save_get_delete() {
+    utils::with_db(|db| {
+        let data = b"standalone blob content";
+
+        // Save standalone
+        let mut blob = Blob::new_from_data(data, "text/plain");
+        let digest = blob.save_to_database(db).expect("save_to_database");
+        assert!(digest.starts_with("sha1-"), "digest should be sha1-prefixed");
+
+        // Get back by digest
+        let retrieved = Blob::get_from_database(db, &digest)
+            .expect("get_from_database")
+            .expect("blob should exist after save");
+        assert_eq!(retrieved.load_content().expect("load_content"), data);
+
+        // Delete (compact + verify gone)
+        Blob::delete_from_database(db, &digest).expect("delete_from_database");
+
+        // Confirm it is no longer retrievable
+        let after = Blob::get_from_database(db, &digest).expect("get after delete");
+        assert!(after.is_none(), "blob should be gone after delete_from_database");
+    });
+}
+
+// delete_from_database returns an error when the blob is still referenced by a document.
+#[test]
+fn blob_delete_fails_when_referenced_by_document() {
+    utils::with_db(|db| {
+        let data = b"referenced blob";
+
+        let mut blob = Blob::new_from_data(data, "text/plain");
+        let digest = blob.save_to_database(db).expect("save_to_database");
+
+        // Attach the same blob to a document so it becomes referenced
+        let mut doc = Document::new_with_id("ref_doc");
+        doc.mutable_properties().at("b").put_blob(&mut blob);
+        default_collection(db)
+            .save_document_with_concurency_control(&mut doc, ConcurrencyControl::FailOnConflict)
+            .expect("save doc");
+
+        // delete_from_database should fail because the blob is still referenced
+        let result = Blob::delete_from_database(db, &digest);
+        assert!(
+            result.is_err(),
+            "delete_from_database should fail for a document-referenced blob"
+        );
+
+        // Blob must still be retrievable
+        let still_there = Blob::get_from_database(db, &digest)
+            .expect("get_from_database")
+            .expect("blob should still exist");
+        assert_eq!(still_there.load_content().expect("load_content"), data);
+    });
+}
