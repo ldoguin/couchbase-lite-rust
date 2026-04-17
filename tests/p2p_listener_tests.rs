@@ -12,6 +12,7 @@ pub mod utils;
 fn open_db(name: &str, dir: &std::path::Path) -> Database {
     let cfg = DatabaseConfiguration {
         directory: dir,
+        #[cfg(feature = "enterprise")]
         encryption_key: None,
     };
     Database::open(name, Some(cfg)).unwrap_or_else(|e| panic!("open {name}: {e}"))
@@ -57,6 +58,7 @@ fn peer_config(peer: &Database, url: &str) -> ReplicatorConfiguration {
         document_ids: MutableArray::default(),
         collections: None,
         accept_parent_domain_cookies: false,
+        #[cfg(feature = "enterprise")]
         accept_only_self_signed_server_certificate: false,
     }
 }
