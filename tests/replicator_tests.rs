@@ -495,7 +495,99 @@ fn conflict_resolver_save_keep_remote() {
     });
 }
 
-// Encryption/Decryption
+// Built-in field_encryption_key (AES-256-GCM via aes-gcm crate)
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn field_encryption_key_roundtrip() {
+    // 32-byte key for AES-256-GCM
+    let key: [u8; 32] = [
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        0x1f, 0x20,
+    ];
+
+    let context1 = ReplicationConfigurationContext {
+        field_encryption_key: Some(key),
+        ..Default::default()
+    };
+    let context2 = ReplicationConfigurationContext {
+        field_encryption_key: Some(key),
+        ..Default::default()
+    };
+
+    let mut tester = utils::ReplicationThreeDbsTester::new(
+        utils::ReplicationTestConfiguration::default(),
+        utils::ReplicationTestConfiguration::default(),
+        Box::new(context1),
+        Box::new(context2),
+    );
+
+    tester.test(|local_db1, local_db2, central_db, _, _| {
+        // Save doc with an encryptable property in local_db1
+        {
+            let mut doc = Document::new_with_id("enc_doc");
+            let mut props = doc.mutable_properties();
+            props.at("plain").put_string("visible");
+            props
+                .at("secret")
+                .put_encrypt(&Encryptable::create_with_string("top_secret_value"));
+            default_collection(local_db1)
+                .save_document_with_concurency_control(&mut doc, ConcurrencyControl::FailOnConflict)
+                .expect("save");
+        }
+
+        // central_db receives the encrypted form: 'encrypted$secret' key must exist
+        assert!(utils::check_callback_with_wait(
+            || default_collection(central_db)
+                .get_document("enc_doc")
+                .is_ok(),
+            None
+        ));
+        {
+            let doc = default_collection(central_db)
+                .get_document("enc_doc")
+                .unwrap();
+            let dict = doc.properties();
+            assert!(
+                dict.to_keys_hash_set().contains("encrypted$secret"),
+                "central_db should store the field in encrypted form"
+            );
+            assert!(
+                dict.to_keys_hash_set().contains("plain"),
+                "non-encryptable field must survive unchanged"
+            );
+        }
+
+        // local_db2 receives the decrypted form: 'secret' is an Encryptable with the original value
+        assert!(utils::check_callback_with_wait(
+            || default_collection(local_db2)
+                .get_document("enc_doc")
+                .is_ok(),
+            None
+        ));
+        {
+            let doc = default_collection(local_db2)
+                .get_document("enc_doc")
+                .unwrap();
+            let dict = doc.properties();
+            let value = dict.get("secret");
+            assert!(
+                value.is_encryptable(),
+                "field should be decrypted back to Encryptable"
+            );
+            let enc = value.get_encryptable_value();
+            assert_eq!(
+                enc.get_value().as_string(),
+                Some("top_secret_value"),
+                "decrypted value must match original plaintext"
+            );
+            drop(enc);
+        }
+    });
+}
+
+// Encryption/Decryption (callback-based)
 
 #[cfg(feature = "enterprise")]
 fn encryptor(

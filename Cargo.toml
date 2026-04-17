@@ -13,6 +13,8 @@ categories = ["database"]
 [dependencies]
 bitflags = "2.9.0"
 enum_primitive = "0.1.1"
+aes-gcm = { version = "0.10", optional = true }
+getrandom = { version = "0.2", optional = true }
 
 [dev-dependencies]
 lazy_static = "1.5.0"
@@ -57,6 +59,6 @@ incremental = false
 # - Predictive queries (PredictiveModel, register/unregister)
 # - Certificate-based replication auth (Authenticator::create_certificate)
 # - Server certificate inspection (Replicator::server_certificate)
-enterprise = []
+enterprise = ["dep:aes-gcm", "dep:getrandom"]
 
 unsafe-threads-test = []

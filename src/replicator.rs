@@ -453,6 +453,47 @@ pub extern "C" fn c_collection_property_encryptor(
         let repl_conf_context = context as *const ReplicationConfigurationContext;
         let mut error = cbl_error.as_ref().map_or(Error::default(), Error::new);
 
+        // Built-in AES-256-GCM field encryption.
+        if let Some(key) = (*repl_conf_context).field_encryption_key {
+            if let Some(plaintext) = input.to_vec() {
+                use aes_gcm::{
+                    Aes256Gcm, KeyInit,
+                    aead::{Aead, generic_array::GenericArray},
+                };
+
+                let mut nonce_bytes = [0u8; 12];
+                if getrandom::getrandom(&mut nonce_bytes).is_err() {
+                    if !cbl_error.is_null() {
+                        *cbl_error = Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                    }
+                    return FLSliceResult::null();
+                }
+
+                let cipher = Aes256Gcm::new(GenericArray::from_slice(&key));
+                let nonce = GenericArray::from_slice(&nonce_bytes);
+
+                return match cipher.encrypt(nonce, plaintext.as_ref()) {
+                    Ok(ciphertext) => {
+                        let mut out = nonce_bytes.to_vec();
+                        out.extend(ciphertext);
+                        FLSlice_Copy(from_bytes(&out).get_ref())
+                    }
+                    Err(_) => {
+                        if !cbl_error.is_null() {
+                            *cbl_error =
+                                Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                        }
+                        FLSliceResult::null()
+                    }
+                };
+            } else {
+                if !cbl_error.is_null() {
+                    *cbl_error = Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                }
+                return FLSliceResult::null();
+            }
+        }
+
         let mut result = FLSliceResult_New(0);
         if let Some(input) = input.to_vec() {
             result = (*repl_conf_context)
@@ -608,6 +649,43 @@ pub extern "C" fn c_collection_property_decryptor(
         let repl_conf_context = context as *const ReplicationConfigurationContext;
         let mut error = cbl_error.as_ref().map_or(Error::default(), Error::new);
 
+        // Built-in AES-256-GCM field decryption.
+        if let Some(key) = (*repl_conf_context).field_encryption_key {
+            if let Some(ciphertext) = input.to_vec() {
+                use aes_gcm::{
+                    Aes256Gcm, KeyInit,
+                    aead::{Aead, generic_array::GenericArray},
+                };
+
+                // 12-byte nonce + 16-byte GCM tag is the minimum valid ciphertext.
+                if ciphertext.len() < 28 {
+                    if !cbl_error.is_null() {
+                        *cbl_error = Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                    }
+                    return FLSliceResult::null();
+                }
+                let (nonce_bytes, ct_with_tag) = ciphertext.split_at(12);
+                let cipher = Aes256Gcm::new(GenericArray::from_slice(&key));
+                let nonce = GenericArray::from_slice(nonce_bytes);
+
+                return match cipher.decrypt(nonce, ct_with_tag) {
+                    Ok(plaintext) => FLSlice_Copy(from_bytes(&plaintext).get_ref()),
+                    Err(_) => {
+                        if !cbl_error.is_null() {
+                            *cbl_error =
+                                Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                        }
+                        FLSliceResult::null()
+                    }
+                };
+            } else {
+                if !cbl_error.is_null() {
+                    *cbl_error = Error::cbl_error(CouchbaseLiteError::Crypto).as_cbl_error();
+                }
+                return FLSliceResult::null();
+            }
+        }
+
         let mut result = FLSliceResult_New(0);
         if let Some(input) = input.to_vec() {
             result = (*repl_conf_context)
@@ -667,6 +745,11 @@ pub struct ReplicationConfigurationContext {
     pub collection_property_encryptor: Option<CollectionPropertyEncryptor>,
     #[cfg(feature = "enterprise")]
     pub collection_property_decryptor: Option<CollectionPropertyDecryptor>,
+    /// AES-256-GCM key for built-in field-level encryption.
+    /// When set, the encryptor/decryptor callbacks are automatically registered
+    /// and use this key directly — no need to set collection_property_encryptor/decryptor.
+    #[cfg(feature = "enterprise")]
+    pub field_encryption_key: Option<[u8; 32]>,
 }
 
 pub struct ReplicationCollection {
@@ -789,13 +872,15 @@ impl Replicator {
     ) -> Result<Self> {
         unsafe {
             let headers = MutableDict::from_hashmap(&config.headers);
-            let mut collections: Option<Vec<CBLReplicationCollection>> =
+            let collections: Option<Vec<CBLReplicationCollection>> =
                 config.collections.as_ref().map(|collections| {
                     collections
                         .iter()
                         .map(|c| c.to_cbl_replication_collection())
                         .collect()
                 });
+
+            let mut cbl_collections = collections.unwrap_or_default();
 
             let cbl_config = CBLReplicatorConfiguration {
                 database: config
@@ -852,21 +937,27 @@ impl Replicator {
                     .as_ref()
                     .and(Some(c_default_collection_property_decryptor)),
                 #[cfg(feature = "enterprise")]
-                documentPropertyEncryptor: context
-                    .collection_property_encryptor
-                    .as_ref()
-                    .and(Some(c_collection_property_encryptor)),
-                #[cfg(feature = "enterprise")]
-                documentPropertyDecryptor: context
-                    .collection_property_decryptor
-                    .as_ref()
-                    .and(Some(c_collection_property_decryptor)),
-                collections: if let Some(collections) = collections.as_mut() {
-                    collections.as_mut_ptr()
+                documentPropertyEncryptor: if context.collection_property_encryptor.is_some()
+                    || context.field_encryption_key.is_some()
+                {
+                    Some(c_collection_property_encryptor)
                 } else {
-                    ptr::null_mut()
+                    None
                 },
-                collectionCount: collections.as_ref().map(|c| c.len()).unwrap_or_default(),
+                #[cfg(feature = "enterprise")]
+                documentPropertyDecryptor: if context.collection_property_decryptor.is_some()
+                    || context.field_encryption_key.is_some()
+                {
+                    Some(c_collection_property_decryptor)
+                } else {
+                    None
+                },
+                collections: if cbl_collections.is_empty() {
+                    ptr::null_mut()
+                } else {
+                    cbl_collections.as_mut_ptr()
+                },
+                collectionCount: cbl_collections.len(),
                 acceptParentDomainCookies: config.accept_parent_domain_cookies,
                 #[cfg(feature = "enterprise")]
                 acceptOnlySelfSignedServerCertificate: config
