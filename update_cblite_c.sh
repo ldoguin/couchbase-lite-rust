@@ -144,7 +144,14 @@ do
         unzipPlatformFolder="${tmpUnzipFolder}/$platform"
         mkdir $unzipPlatformFolder
 
-        tar -x -f $zippedPath --directory $unzipPlatformFolder
+        if [[ "$zippedPath" == *.tar.gz ]]; then
+            tar -zx -f "$zippedPath" --directory "$unzipPlatformFolder"
+        elif [[ "$zippedPath" == *.zip ]]; then
+            unzip -q "$zippedPath" -d "$unzipPlatformFolder"
+        else
+            echoRed "Unknown archive format for $zippedPath"
+            exit 1
+        fi
     done
 
     echoGreen "Unzipping successful"
