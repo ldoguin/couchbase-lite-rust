@@ -4,6 +4,7 @@ extern crate couchbase_lite;
 use self::couchbase_lite::*;
 #[cfg(feature = "enterprise")]
 use utils::{add_doc, check_callback_with_wait, default_collection};
+
 #[cfg(feature = "enterprise")]
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "enterprise")]

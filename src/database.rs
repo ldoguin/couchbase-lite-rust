@@ -16,23 +16,22 @@
 //
 
 use crate::{
-    CblRef, ListenerToken, release, retain,
+    CblRef, release, retain,
     slice::from_str,
     error::{Result, check_bool, failure},
     c_api::{
         CBLDatabase, CBLDatabaseConfiguration, CBLDatabaseConfiguration_Default,
-        CBLDatabase_AddChangeListener, CBLDatabase_BeginTransaction,
-        CBLDatabase_BufferNotifications, CBLDatabase_Close, CBLDatabase_Count, CBLDatabase_Delete,
-        CBLDatabase_EndTransaction, CBLDatabase_Name, CBLDatabase_Open, CBLDatabase_Path,
-        CBLDatabase_PerformMaintenance, CBLDatabase_SendNotifications, CBLError,
-        CBL_DatabaseExists, CBL_DeleteDatabase, FLString, kCBLMaintenanceTypeCompact,
+        CBLDatabase_BeginTransaction, CBLDatabase_BufferNotifications, CBLDatabase_Close,
+        CBLDatabase_Delete, CBLDatabase_EndTransaction, CBLDatabase_Name, CBLDatabase_Open,
+        CBLDatabase_Path, CBLDatabase_PerformMaintenance, CBLDatabase_SendNotifications, CBLError,
+        CBL_DatabaseExists, CBL_DeleteDatabase, kCBLMaintenanceTypeCompact,
         kCBLMaintenanceTypeFullOptimize, kCBLMaintenanceTypeIntegrityCheck,
         kCBLMaintenanceTypeOptimize, kCBLMaintenanceTypeReindex, CBL_CopyDatabase,
         CBLDatabase_ScopeNames, CBLDatabase_CollectionNames, CBLDatabase_Scope,
         CBLDatabase_Collection, CBLDatabase_CreateCollection, CBLDatabase_DeleteCollection,
         CBLDatabase_DefaultScope, CBLDatabase_DefaultCollection,
     },
-    Listener, check_error, Error, CouchbaseLiteError,
+    check_error, Error, CouchbaseLiteError,
     collection::Collection,
     scope::Scope,
     MutableArray,
@@ -125,30 +124,6 @@ enum_from_primitive! {
         /// This may take some time, depending on the size of the indexes, but it doesn't have to
         /// be redone unless the database changes drastically, or new indexes are created.
         FullOptimize    = kCBLMaintenanceTypeFullOptimize as isize,
-    }
-}
-
-/// A database change listener callback, invoked after one or more documents are changed on disk
-#[deprecated(note = "please use `CollectionChangeListener` on default collection instead")]
-type DatabaseChangeListener = Box<dyn Fn(&Database, Vec<String>)>;
-
-#[unsafe(no_mangle)]
-unsafe extern "C" fn c_database_change_listener(
-    context: *mut ::std::os::raw::c_void,
-    db: *const CBLDatabase,
-    num_docs: ::std::os::raw::c_uint,
-    c_doc_ids: *mut FLString,
-) {
-    let callback = context as *const DatabaseChangeListener;
-    let database = Database::reference(db as *mut CBLDatabase);
-
-    unsafe {
-        let doc_ids = std::slice::from_raw_parts(c_doc_ids, num_docs as usize)
-            .iter()
-            .filter_map(|doc_id| doc_id.to_string())
-            .collect();
-
-        (*callback)(&database, doc_ids);
     }
 }
 
@@ -387,7 +362,11 @@ impl Database {
     /// Returns the number of documents in the database.
     #[deprecated(note = "please use `count` on the default collection instead")]
     pub fn count(&self) -> u64 {
-        unsafe { CBLDatabase_Count(self.get_ref()) }
+        self.default_collection()
+            .ok()
+            .flatten()
+            .map(|c| c.count())
+            .unwrap_or(0)
     }
 
     /// Returns the names of all existing scopes in the database.
@@ -546,37 +525,6 @@ impl Database {
     }
 
     //////// NOTIFICATIONS:
-
-    /// Registers a database change listener function. It will be called after one or more
-    /// documents are changed on disk. Remember to keep the reference to the ChangeListener
-    /// if you want the callback to keep working.
-    ///
-    /// # Lifetime
-    ///
-    /// The listener is deleted at the end of life of the `Listener` object.
-    /// You must keep the `Listener` object alive as long as you need it.
-    #[must_use]
-    #[deprecated(note = "please use `add_listener` on default collection instead")]
-    pub fn add_listener(
-        &mut self,
-        listener: DatabaseChangeListener,
-    ) -> Listener<DatabaseChangeListener> {
-        unsafe {
-            let listener = Box::new(listener);
-            let ptr = Box::into_raw(listener);
-
-            Listener::new(
-                ListenerToken {
-                    cbl_ref: CBLDatabase_AddChangeListener(
-                        self.cbl_ref,
-                        Some(c_database_change_listener),
-                        ptr.cast(),
-                    ),
-                },
-                Box::from_raw(ptr),
-            )
-        }
-    }
 
     /// Switches the database to buffered-notification mode. Notifications for objects belonging
     /// to this database (documents, queries, replicators, and of course the database) will not be

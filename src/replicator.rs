@@ -33,14 +33,15 @@ use crate::{
         CBLProxySettings, CBLProxyType, CBLReplicatedDocument, CBLReplicator,
         CBLReplicatorConfiguration, CBLReplicatorStatus, CBLReplicatorType,
         CBLReplicator_AddChangeListener, CBLReplicator_AddDocumentReplicationListener,
-        CBLReplicator_Create, CBLReplicator_IsDocumentPending, CBLReplicator_PendingDocumentIDs,
-        CBLReplicator_SetHostReachable, CBLReplicator_SetSuspended, CBLReplicator_Start,
-        CBLReplicator_Status, CBLReplicator_Stop, FLDict, FLString, kCBLDocumentFlagsAccessRemoved,
-        kCBLDocumentFlagsDeleted, kCBLProxyHTTP, kCBLProxyHTTPS, kCBLReplicatorBusy,
-        kCBLReplicatorConnecting, kCBLReplicatorIdle, kCBLReplicatorOffline, kCBLReplicatorStopped,
-        kCBLReplicatorTypePull, kCBLReplicatorTypePush, kCBLReplicatorTypePushAndPull,
-        CBLReplicator_IsDocumentPending2, CBLReplicator_PendingDocumentIDs2,
-        CBLReplicationCollection,
+        CBLReplicator_Config, CBLReplicator_Create, CBLReplicator_IsDocumentPending,
+        CBLReplicator_PendingDocumentIDs, CBLReplicator_SetHostReachable,
+        CBLReplicator_SetSuspended, CBLReplicator_Start, CBLReplicator_Status, CBLReplicator_Stop,
+        FLDict, FLString, kCBLDocumentFlagsAccessRemoved, kCBLDocumentFlagsDeleted, kCBLProxyHTTP,
+        kCBLProxyHTTPS, kCBLReplicatorBusy, kCBLReplicatorConnecting, kCBLReplicatorIdle,
+        kCBLReplicatorOffline, kCBLReplicatorStopped, kCBLReplicatorTypePull,
+        kCBLReplicatorTypePush, kCBLReplicatorTypePushAndPull, CBLReplicator_IsDocumentPending2,
+        CBLReplicator_PendingDocumentIDs2, CBLReplicationCollection, CBLCollection,
+        CBLDatabase_DefaultCollection,
     },
     MutableArray, Listener,
     collection::Collection,
@@ -363,6 +364,8 @@ pub type DefaultCollectionPropertyEncryptor = fn(
 #[cfg(feature = "enterprise")]
 pub extern "C" fn c_default_collection_property_encryptor(
     context: *mut ::std::os::raw::c_void,
+    _scope: FLString,
+    _collection: FLString,
     document_id: FLString,
     properties: FLDict,
     key_path: FLString,
@@ -559,6 +562,8 @@ pub type DefaultCollectionPropertyDecryptor = fn(
 #[cfg(feature = "enterprise")]
 pub extern "C" fn c_default_collection_property_decryptor(
     context: *mut ::std::os::raw::c_void,
+    _scope: FLString,
+    _collection: FLString,
     document_id: FLString,
     properties: FLDict,
     key_path: FLString,
@@ -846,6 +851,9 @@ pub struct Replicator {
     pub context: Option<Box<ReplicationConfigurationContext>>,
     change_listeners: ReplicatorsListeners<ReplicatorChangeListener>,
     pub document_listeners: ReplicatorsListeners<ReplicatedDocumentListener>,
+    // Keeps the default collection alive when using the legacy `database` config path,
+    // ensuring its refcount stays balanced until the replicator is dropped.
+    _legacy_col: Option<Collection>,
 }
 
 // SAFETY: CBLReplicator is documented as thread-safe for all operations used
@@ -872,22 +880,58 @@ impl Replicator {
     ) -> Result<Self> {
         unsafe {
             let headers = MutableDict::from_hashmap(&config.headers);
-            let collections: Option<Vec<CBLReplicationCollection>> =
-                config.collections.as_ref().map(|collections| {
+
+            // Build the CBLCollectionConfiguration list.
+            // If explicit collections are provided, use them directly.
+            // If the legacy `database` field is set, derive the default collection from it
+            // and apply the top-level filter/channel fields to that collection.
+            //
+            // When using the legacy database path, we get a retained collection pointer from
+            // CBLDatabase_DefaultCollection. We pass it to CBLReplicator_Create (which retains
+            // it internally), then immediately release our own retain so the replicator holds
+            // the only reference. This avoids keeping the collection alive beyond the replicator.
+            let legacy_col_ptr: Option<*mut CBLCollection> = if config.collections.is_none() {
+                if let Some(db) = config.database.as_ref() {
+                    let mut error = CBLError::default();
+                    let col = CBLDatabase_DefaultCollection(db.get_ref(), &mut error);
+                    check_error(&error)?;
+                    Some(col)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let mut cbl_collections: Vec<CBLReplicationCollection> =
+                if let Some(collections) = config.collections.as_ref() {
                     collections
                         .iter()
                         .map(|c| c.to_cbl_replication_collection())
                         .collect()
-                });
-
-            let mut cbl_collections = collections.unwrap_or_default();
+                } else if let Some(col_ptr) = legacy_col_ptr {
+                    vec![CBLReplicationCollection {
+                        collection: col_ptr,
+                        conflictResolver: context
+                            .conflict_resolver
+                            .as_ref()
+                            .and(Some(c_replication_conflict_resolver)),
+                        pushFilter: context
+                            .push_filter
+                            .as_ref()
+                            .and(Some(c_replication_push_filter)),
+                        pullFilter: context
+                            .pull_filter
+                            .as_ref()
+                            .and(Some(c_replication_pull_filter)),
+                        channels: config.channels.get_ref(),
+                        documentIDs: config.document_ids.get_ref(),
+                    }]
+                } else {
+                    vec![]
+                };
 
             let cbl_config = CBLReplicatorConfiguration {
-                database: config
-                    .database
-                    .as_ref()
-                    .map(|d| d.get_ref())
-                    .unwrap_or(ptr::null_mut()),
                 endpoint: config.endpoint.get_ref(),
                 replicatorType: config.replicator_type.clone().into(),
                 continuous: config.continuous,
@@ -912,35 +956,13 @@ impl Replicator {
                     .trusted_root_certificates
                     .as_ref()
                     .map_or(slice::NULL_SLICE, |c| slice::from_bytes(c).get_ref()),
-                channels: config.channels.get_ref(),
-                documentIDs: config.document_ids.get_ref(),
-                pushFilter: context
-                    .push_filter
-                    .as_ref()
-                    .and(Some(c_replication_push_filter)),
-                pullFilter: context
-                    .pull_filter
-                    .as_ref()
-                    .and(Some(c_replication_pull_filter)),
-                conflictResolver: context
-                    .conflict_resolver
-                    .as_ref()
-                    .and(Some(c_replication_conflict_resolver)),
-                #[cfg(feature = "enterprise")]
-                propertyEncryptor: context
-                    .default_collection_property_encryptor
-                    .as_ref()
-                    .and(Some(c_default_collection_property_encryptor)),
-                #[cfg(feature = "enterprise")]
-                propertyDecryptor: context
-                    .default_collection_property_decryptor
-                    .as_ref()
-                    .and(Some(c_default_collection_property_decryptor)),
                 #[cfg(feature = "enterprise")]
                 documentPropertyEncryptor: if context.collection_property_encryptor.is_some()
                     || context.field_encryption_key.is_some()
                 {
                     Some(c_collection_property_encryptor)
+                } else if context.default_collection_property_encryptor.is_some() {
+                    Some(c_default_collection_property_encryptor)
                 } else {
                     None
                 },
@@ -949,6 +971,8 @@ impl Replicator {
                     || context.field_encryption_key.is_some()
                 {
                     Some(c_collection_property_decryptor)
+                } else if context.default_collection_property_decryptor.is_some() {
+                    Some(c_default_collection_property_decryptor)
                 } else {
                     None
                 },
@@ -968,6 +992,14 @@ impl Replicator {
             let mut error = CBLError::default();
             let replicator = CBLReplicator_Create(&cbl_config, std::ptr::addr_of_mut!(error));
 
+            // Wrap the legacy collection pointer back into a Collection so it is properly
+            // released when the Replicator is dropped. We keep it alive here to ensure the
+            // collection's refcount stays balanced: the database holds one ref, we hold one,
+            // and CBLReplicator_Create holds one. When the database is freed first (as happens
+            // in the test harness), the collection's refcount drops to 2; when the replicator
+            // is freed, it drops to 1; when our Collection wrapper drops, it reaches 0.
+            let legacy_col: Option<Collection> = legacy_col_ptr.map(Collection::take_ownership);
+
             check_error(&error).map(move |_| Self {
                 cbl_ref: replicator,
                 config: Some(config),
@@ -975,6 +1007,7 @@ impl Replicator {
                 context: Some(context),
                 change_listeners: vec![],
                 document_listeners: vec![],
+                _legacy_col: legacy_col,
             })
         }
     }
@@ -1047,13 +1080,22 @@ impl Replicator {
 
     /** Indicates which documents have local changes that have not yet been pushed to the server
     by this replicator. This is of course a snapshot, that will go out of date as the replicator
-    makes progress and/or documents are saved locally. */
+    makes progress and/or documents are saved locally.
+    Uses the first collection registered with this replicator. */
     #[deprecated(note = "please use `pending_document_ids_2` instead")]
     pub fn pending_document_ids(&self) -> Result<HashSet<String>> {
         unsafe {
+            let cfg = CBLReplicator_Config(self.get_ref());
+            if cfg.is_null() || (*cfg).collectionCount == 0 || (*cfg).collections.is_null() {
+                return Err(Error::default());
+            }
+            let collection = (*(*cfg).collections).collection;
             let mut error = CBLError::default();
-            let docs: FLDict =
-                CBLReplicator_PendingDocumentIDs(self.get_ref(), std::ptr::addr_of_mut!(error));
+            let docs: FLDict = CBLReplicator_PendingDocumentIDs(
+                self.get_ref(),
+                collection,
+                std::ptr::addr_of_mut!(error),
+            );
 
             check_error(&error).and_then(|()| {
                 if docs.is_null() {
@@ -1091,15 +1133,23 @@ impl Replicator {
 
     /** Indicates whether the document with the given ID has local changes that have not yet been
     pushed to the server by this replicator.
+    Uses the first collection registered with this replicator.
 
     This is equivalent to, but faster than, calling \ref pending_document_ids and
     checking whether the result contains \p docID. See that function's documentation for details. */
+    #[deprecated(note = "please use `is_document_pending_2` instead")]
     pub fn is_document_pending(&self, doc_id: &str) -> Result<bool> {
         unsafe {
+            let cfg = CBLReplicator_Config(self.get_ref());
+            if cfg.is_null() || (*cfg).collectionCount == 0 || (*cfg).collections.is_null() {
+                return Ok(false);
+            }
+            let collection = (*(*cfg).collections).collection;
             let mut error = CBLError::default();
             let result = CBLReplicator_IsDocumentPending(
                 self.get_ref(),
                 from_str(doc_id).get_ref(),
+                collection,
                 std::ptr::addr_of_mut!(error),
             );
             check_error(&error).map(|_| result)
@@ -1167,6 +1217,12 @@ impl Replicator {
 
 impl Drop for Replicator {
     fn drop(&mut self) {
+        // Drop _legacy_col before releasing the replicator. The replicator's internal
+        // CBLReplicator_Release will release its own reference to the collection. If we
+        // release our _legacy_col after that, the collection may already be freed (if the
+        // database was freed first), causing a double-free. By dropping it first, we ensure
+        // our reference is released while the replicator still holds the collection alive.
+        drop(self._legacy_col.take());
         unsafe { release(self.get_ref()) }
     }
 }

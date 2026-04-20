@@ -71,7 +71,12 @@ impl Fleece {
     pub fn parse(data: &[u8], trust: Trust) -> Result<Self> {
         unsafe {
             let copied = FLSlice_Copy(from_bytes(data).get_ref());
-            let doc = FLDoc_FromResultData(copied, trust as u32, ptr::null_mut(), NULL_SLICE);
+            let doc = FLDoc_FromResultData(
+                copied,
+                (trust as u32).try_into().unwrap(),
+                ptr::null_mut(),
+                NULL_SLICE,
+            );
             if doc.is_null() {
                 return Err(Error::fleece_error(FLError_kFLInvalidData));
             }

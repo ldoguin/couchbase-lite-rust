@@ -184,7 +184,8 @@ do
                 mkdir $platformFolder
 
                 libFile="${unzipPlatformFolder}/libcblite-${version}/lib/x86_64-linux-gnu/libcblite.so.${version}"
-                libDestinationFile="${platformFolder}/libcblite.so.${major_version}"
+                majorVersion=$(echo "$version" | cut -d. -f1)
+                libDestinationFile="${platformFolder}/libcblite.so.${majorVersion}"
                 cp $libFile $libDestinationFile
 
                 ;;
@@ -216,7 +217,8 @@ do
                 mkdir $platformFolder
 
                 libFile="${unzipPlatformFolder}/libcblite-${version}/lib/libcblite.${version}.dylib"
-                libDestinationFile="${platformFolder}/libcblite.${major_version}.dylib"
+                majorVersion=$(echo "$version" | cut -d. -f1)
+                libDestinationFile="${platformFolder}/libcblite.${majorVersion}.dylib"
                 cp $libFile $libDestinationFile
 
                 ;;

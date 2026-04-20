@@ -6,7 +6,8 @@ use self::tempdir::TempDir;
 
 use std::{
     sync::{Arc, Mutex, MutexGuard},
-    thread, time,
+    thread,
+    time::{self, Duration, Instant},
 };
 #[cfg(feature = "enterprise")]
 use std::collections::HashMap;
@@ -73,20 +74,34 @@ impl Drop for LeakChecker {
         if self.is_checking {
             println!("Checking if Couchbase Lite objects were leaked by this test");
 
-            // Poll instance_count() briefly to allow the C library to finish
-            // async cleanup of internal objects (e.g. replicator network connections).
-            let max_wait = time::Duration::from_secs(5);
-            let poll_interval = time::Duration::from_millis(100);
-            let start = time::Instant::now();
+            // CBL's internal worker threads release object references asynchronously after
+            // a replicator stops. Poll until the count reaches `start` (no leak) or has
+            // been stable for 500 ms (genuine leak), with a 5 s hard timeout.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let poll = Duration::from_millis(50);
+            let stable_required = Duration::from_millis(500);
+            let mut stable_since = Instant::now();
+            let mut prev = instance_count();
             loop {
-                self.end_instance_count = instance_count();
-                if self.end_instance_count == self.start_instance_count
-                    || start.elapsed() >= max_wait
+                if prev == self.start_instance_count {
+                    break; // reached expected count — no leak
+                }
+                if prev.saturating_sub(self.start_instance_count) > 0
+                    && stable_since.elapsed() >= stable_required
                 {
+                    break; // count has been above start for 500 ms — genuine leak
+                }
+                if Instant::now() >= deadline {
                     break;
                 }
-                thread::sleep(poll_interval);
+                thread::sleep(poll);
+                let cur = instance_count();
+                if cur != prev {
+                    stable_since = Instant::now();
+                    prev = cur;
+                }
             }
+            self.end_instance_count = instance_count();
 
             if self.start_instance_count != self.end_instance_count {
                 println!("Leaks detected :-(");

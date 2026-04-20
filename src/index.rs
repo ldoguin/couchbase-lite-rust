@@ -1,11 +1,10 @@
 use crate::{
     CblRef, Database,
     c_api::{
-        CBLValueIndexConfiguration, CBLDatabase_GetIndexNames, CBLDatabase_DeleteIndex, CBLError,
-        CBLDatabase_CreateValueIndex, CBLCollection_CreateValueIndex, CBLCollection_DeleteIndex,
-        CBLCollection_GetIndexNames, CBLCollection_CreateArrayIndex, CBLArrayIndexConfiguration,
-        CBLQueryIndex, CBLQueryIndex_Name, CBLQueryIndex_Collection, CBLCollection_GetIndex,
-        CBLFullTextIndexConfiguration, CBLCollection_CreateFullTextIndex,
+        CBLValueIndexConfiguration, CBLError, CBLCollection_CreateValueIndex,
+        CBLCollection_DeleteIndex, CBLCollection_GetIndexNames, CBLCollection_CreateArrayIndex,
+        CBLArrayIndexConfiguration, CBLQueryIndex, CBLQueryIndex_Name, CBLQueryIndex_Collection,
+        CBLCollection_GetIndex, CBLFullTextIndexConfiguration, CBLCollection_CreateFullTextIndex,
     },
     error::{Error, Result, failure},
     slice::{from_str, from_c_str, Slice},
@@ -253,45 +252,28 @@ impl Drop for QueryIndex {
 }
 
 impl Database {
-    /// Creates a value index.
-    /// Indexes are persistent.
-    /// If an identical index with that name already exists, nothing happens (and no error is returned.)
-    /// If a non-identical index with that name already exists, it is deleted and re-created.
+    /// Creates a value index on the default collection.
     #[deprecated(note = "please use `create_index` on default collection instead")]
     pub fn create_index(&self, name: &str, config: &ValueIndexConfiguration) -> Result<bool> {
-        let mut err = CBLError::default();
-        let slice = from_str(name);
-        let r = unsafe {
-            CBLDatabase_CreateValueIndex(
-                self.get_ref(),
-                slice.get_ref(),
-                config.get_ref(),
-                &mut err,
-            )
-        };
-        if !err {
-            return Ok(r);
-        }
-        failure(err)
+        self.default_collection()?
+            .ok_or_else(|| Error::cbl_error(CouchbaseLiteError::NotFound))?
+            .create_index(name, config)
     }
 
-    /// Deletes an index given its name.
+    /// Deletes an index by name from the default collection.
     #[deprecated(note = "please use `delete_index` on default collection instead")]
     pub fn delete_index(&self, name: &str) -> Result<bool> {
-        let mut err = CBLError::default();
-        let slice = from_str(name);
-        let r = unsafe { CBLDatabase_DeleteIndex(self.get_ref(), slice.get_ref(), &mut err) };
-        if !err {
-            return Ok(r);
-        }
-        failure(err)
+        self.default_collection()?
+            .ok_or_else(|| Error::cbl_error(CouchbaseLiteError::NotFound))?
+            .delete_index(name)
     }
 
-    /// Returns the names of the indexes on this database, as an Array of strings.
+    /// Returns the names of the indexes on the default collection.
     #[deprecated(note = "please use `get_index_names` on default collection instead")]
-    pub fn get_index_names(&self) -> Array {
-        let arr = unsafe { CBLDatabase_GetIndexNames(self.get_ref()) };
-        Array::wrap(arr)
+    pub fn get_index_names(&self) -> Result<Array> {
+        self.default_collection()?
+            .ok_or_else(|| Error::cbl_error(CouchbaseLiteError::NotFound))?
+            .get_index_names()
     }
 }
 
