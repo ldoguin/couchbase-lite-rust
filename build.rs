@@ -145,26 +145,31 @@ fn generate_bindings() -> Result<(), Box<dyn Error>> {
         .header("src/wrapper.h")
         .clang_arg(format!("-I{}", CBL_INCLUDE_DIR));
 
-    // Fix cross-compilation from MacOS to Android targets.
-    // The following clang_arg calls prevent bindgen from trying to include
-    // MacOS standards headers and returning an error when trying to generate bindings.
-    // Basically, we specifiy NDK sysroot and usr/include dirs depending on the target arch.
+    // Fix cross-compilation from MacOS or Linux to Android targets.
+    // Without the NDK sysroot, bindgen falls back to host system headers which
+    // contain types unsupported on Android (e.g. __float128 on Linux x86-64).
     //
     // Sample of errors:
     //
     // /Applications/Xcode.app/.../Developer/SDKs/MacOSX10.15.sdk/usr/include/sys/cdefs.h:807:2: error: Unsupported architecture
-    // /Applications/Xcode.app/.../Developer/SDKs/MacOSX10.15.sdk/usr/include/machine/_types.h:34:2: error: architecture not supported
+    // /usr/include/bits/floatn.h:97:9: error: __float128 is not supported on this target
     // FTR: https://github.com/rust-lang/rust-bindgen/issues/1780
-    if is_host(OperatingSystem::MacOs)? && is_target(OperatingSystem::Android)? {
+    if is_target(OperatingSystem::Android)? && !is_host(OperatingSystem::Android)? {
+        let prebuilt_dir = if is_host(OperatingSystem::MacOs)? {
+            "darwin-x86_64"
+        } else {
+            "linux-x86_64"
+        };
         let ndk_sysroot = format!(
-            "{}/toolchains/llvm/prebuilt/darwin-x86_64/sysroot",
+            "{}/toolchains/llvm/prebuilt/{}/sysroot",
             env::var("NDK_HOME")?,
+            prebuilt_dir,
         );
         let target_triplet =
-            if env::var("CARGO_CFG_TARGET_ARCH").expect("Can't read target arch value!") == "arm" {
-                "arm-linux-androideabi"
-            } else {
-                "aarch64-linux-android"
+            match env::var("CARGO_CFG_TARGET_ARCH").expect("Can't read target arch value!").as_str() {
+                "arm"  => "arm-linux-androideabi",
+                "x86"  => "i686-linux-android",
+                _      => "aarch64-linux-android",
             };
         bindings = bindings
             .clang_arg(format!("--sysroot={}", ndk_sysroot))
