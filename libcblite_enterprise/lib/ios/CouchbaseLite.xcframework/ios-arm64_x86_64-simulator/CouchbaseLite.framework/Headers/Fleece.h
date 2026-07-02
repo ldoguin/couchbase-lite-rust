@@ -30,7 +30,7 @@
 
 #ifdef __OBJC__
     // When compiling as Objective-C, include CoreFoundation / Objective-C utilities:
-#include <CouchbaseLite/Fleece+CoreFoundation.h>
+#   include "Fleece+CoreFoundation.h"
 #endif
 
 #endif // _FLEECE_H

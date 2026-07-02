@@ -254,6 +254,9 @@ do
 
                 # Some files/directories must be moved only once for all platforms: include directory & LICENSE.txt
                 cp -R "${unzipPlatformFolder}/libcblite-${version}/include" $tmpLibcbliteFolder
+                # Remove C++ wrapper headers — bindgen only uses the C headers; these are dead weight in the repo
+                rm -rf "${tmpLibcbliteFolder}/include/cbl++"
+                find "${tmpLibcbliteFolder}/include/fleece" -name "*.hh" -delete
 
                 cp "${unzipPlatformFolder}/libcblite-${version}/LICENSE.txt" $tmpLibcbliteFolder
 
@@ -264,6 +267,8 @@ do
                 mkdir $platformFolder
 
                 cp -R "${unzipPlatformFolder}/CouchbaseLite.xcframework" $platformFolder
+                # Remove C++ wrapper headers from inside the xcframework — unused by the Rust bindgen pipeline
+                find "${platformFolder}" -name "*.hh" -delete
 
                 ;;
         esac
