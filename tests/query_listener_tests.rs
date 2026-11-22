@@ -53,12 +53,6 @@ fn query_column_names_select_star() {
 // add_listener fires at least once after registration.  The listener receives
 // a Query and a ListenerToken; copy_current_results() on that token returns
 // the current result set at the time of the callback.
-//
-// Implementation note: c_query_change_listener creates a temporary ListenerToken
-// from the raw pointer and drops it at the end of each callback, which calls
-// CBLListener_Remove.  To avoid a double-free when the Listener is later
-// dropped, we use std::mem::forget on the Listener after the test completes.
-// This is a workaround for a bug in the crate's C shim.
 #[test]
 fn query_add_listener_fires_on_registration() {
     init_logging();
@@ -88,18 +82,12 @@ fn query_add_listener_fires_on_registration() {
         let n = row_count.lock().unwrap().unwrap();
         assert_eq!(n, 2, "expected 2 rows on initial fire, got {n}");
 
-        // Prevent double-free: the C shim already called CBLListener_Remove
-        // when it dropped the temporary ListenerToken during the callback.
-        std::mem::forget(listener);
+        drop(listener);
     });
 }
 
 // Dropping the Listener object must stop further callbacks.
 // We register, wait for the initial fire, drop, then verify no more fires.
-//
-// Because the C shim already called CBLListener_Remove during the callback,
-// we use std::mem::forget instead of drop to avoid a double-free.  The
-// observable effect (no further callbacks) is the same either way.
 #[test]
 fn query_listener_stops_after_drop() {
     init_logging();
@@ -123,18 +111,16 @@ fn query_listener_stops_after_drop() {
             "listener did not fire on registration"
         );
 
-        // Forget instead of drop to avoid double-free from the C shim bug.
-        std::mem::forget(listener);
-        let count_after_forget = *fired.lock().unwrap();
+        drop(listener);
+        let count_after_drop = *fired.lock().unwrap();
 
-        // Insert a doc; no further callback should arrive since the token
-        // was already removed by the C shim during the first callback.
-        add_doc(db, "after-forget", 2, "after");
+        // Insert a doc; no further callback should arrive after the drop.
+        add_doc(db, "after-drop", 2, "after");
         std::thread::sleep(std::time::Duration::from_millis(300));
 
         assert_eq!(
             *fired.lock().unwrap(),
-            count_after_forget,
+            count_after_drop,
             "listener fired after token was removed"
         );
     });
@@ -174,6 +160,6 @@ fn query_copy_current_results_matches_execute() {
 
         assert_eq!(snapshot.lock().unwrap().clone(), vec![10, 20, 30]);
 
-        std::mem::forget(listener);
+        drop(listener);
     });
 }

@@ -49,7 +49,8 @@ unsafe extern "C" fn c_query_change_listener(
 ) {
     let callback = context as *const ChangeListener;
     let query = Query::reference(query.cast::<CBLQuery>());
-    let token = ListenerToken::new(token);
+    // The token is owned by the `Listener` returned from `add_listener`; dropping it here would remove the listener.
+    let token = std::mem::ManuallyDrop::new(ListenerToken::new(token));
 
     unsafe {
         (*callback)(&query, &token);

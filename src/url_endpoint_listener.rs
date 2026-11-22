@@ -27,7 +27,10 @@ use std::ptr;
 /// Authenticator used by a `UrlEndpointListener` to verify connecting clients.
 pub struct ListenerAuthenticator {
     cbl_ref: *mut CBLListenerAuthenticator,
+    password_callback: *mut PasswordCallback,
 }
+
+type PasswordCallback = Box<dyn Fn(String, String) -> bool + Send + Sync>;
 
 impl ListenerAuthenticator {
     /// Accepts any client that provides a valid username/password via HTTP Basic auth.
@@ -37,11 +40,9 @@ impl ListenerAuthenticator {
     where
         F: Fn(String, String) -> bool + Send + Sync + 'static,
     {
-        // Box the closure and leak it; the `unregistered` path is not available
-        // for listener auth, so we accept the small leak for the listener's lifetime.
-        let boxed: Box<Box<dyn Fn(String, String) -> bool + Send + Sync>> =
-            Box::new(Box::new(callback));
-        let ctx = Box::into_raw(boxed) as *mut std::ffi::c_void;
+        // Freed in `Drop`; a `UrlEndpointListener` keeps its authenticator alive.
+        let password_callback: *mut PasswordCallback = Box::into_raw(Box::new(Box::new(callback)));
+        let ctx = password_callback.cast::<std::ffi::c_void>();
 
         unsafe extern "C" fn c_password_cb(
             context: *mut std::ffi::c_void,
@@ -49,7 +50,7 @@ impl ListenerAuthenticator {
             password: crate::c_api::FLString,
         ) -> bool {
             unsafe {
-                let cb = &*(context as *const Box<dyn Fn(String, String) -> bool + Send + Sync>);
+                let cb = &*(context as *const PasswordCallback);
                 let u = username.to_string().unwrap_or_default();
                 let p = password.to_string().unwrap_or_default();
                 cb(u, p)
@@ -58,20 +59,29 @@ impl ListenerAuthenticator {
 
         let auth_cb: CBLListenerPasswordAuthCallback = Some(c_password_cb);
         let ptr = unsafe { CBLListenerAuth_CreatePassword(auth_cb, ctx) };
-        Self { cbl_ref: ptr }
+        Self {
+            cbl_ref: ptr,
+            password_callback,
+        }
     }
 
     /// Accepts any client certificate (no verification).
     pub fn certificate() -> Self {
         let auth_cb: CBLListenerCertAuthCallback = Some(c_accept_any_cert);
         let ptr = unsafe { CBLListenerAuth_CreateCertificate(auth_cb, ptr::null_mut()) };
-        Self { cbl_ref: ptr }
+        Self {
+            cbl_ref: ptr,
+            password_callback: ptr::null_mut(),
+        }
     }
 
     /// Accepts client certificates that chain to the given root certificate.
     pub fn certificate_with_root_certs(root_certs: Cert) -> Self {
         let ptr = unsafe { CBLListenerAuth_CreateCertificateWithRootCerts(root_certs.get_ref()) };
-        Self { cbl_ref: ptr }
+        Self {
+            cbl_ref: ptr,
+            password_callback: ptr::null_mut(),
+        }
     }
 }
 
@@ -84,7 +94,12 @@ unsafe extern "C" fn c_accept_any_cert(
 
 impl Drop for ListenerAuthenticator {
     fn drop(&mut self) {
-        unsafe { CBLListenerAuth_Free(self.cbl_ref) }
+        unsafe {
+            CBLListenerAuth_Free(self.cbl_ref);
+            if !self.password_callback.is_null() {
+                drop(Box::from_raw(self.password_callback));
+            }
+        }
     }
 }
 
@@ -133,6 +148,8 @@ pub struct UrlEndpointListener {
     cbl_ref: *mut CBLURLEndpointListener,
     // Keep collection pointers alive for the duration of the listener.
     _collection_ptrs: Vec<*mut CBLCollection>,
+    // The authenticator's callback context must outlive the listener.
+    _authenticator: Option<ListenerAuthenticator>,
 }
 
 impl CblRef for UrlEndpointListener {
@@ -191,6 +208,7 @@ impl UrlEndpointListener {
             Ok(Self {
                 cbl_ref: ptr,
                 _collection_ptrs: collection_ptrs,
+                _authenticator: config.authenticator,
             })
         }
     }
