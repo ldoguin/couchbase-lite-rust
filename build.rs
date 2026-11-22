@@ -165,12 +165,14 @@ fn generate_bindings() -> Result<(), Box<dyn Error>> {
             env::var("NDK_HOME")?,
             prebuilt_dir,
         );
-        let target_triplet =
-            match env::var("CARGO_CFG_TARGET_ARCH").expect("Can't read target arch value!").as_str() {
-                "arm"  => "arm-linux-androideabi",
-                "x86"  => "i686-linux-android",
-                _      => "aarch64-linux-android",
-            };
+        let target_triplet = match env::var("CARGO_CFG_TARGET_ARCH")
+            .expect("Can't read target arch value!")
+            .as_str()
+        {
+            "arm" => "arm-linux-androideabi",
+            "x86" => "i686-linux-android",
+            _ => "aarch64-linux-android",
+        };
         bindings = bindings
             .clang_arg(format!("--sysroot={}", ndk_sysroot))
             .clang_arg(format!("-I{}/usr/include", ndk_sysroot))
