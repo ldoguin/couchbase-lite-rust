@@ -573,6 +573,16 @@ where
 
     result
 }
+/// Waits until a (one-shot) replicator has stopped. Calling `start` on a replicator that is
+/// still running is a no-op, so tests must wait before triggering a new replication.
+#[cfg(feature = "enterprise")]
+pub fn wait_for_replicator_stopped(repl: &Replicator, max_wait_seconds: Option<u64>) -> bool {
+    check_callback_with_wait(
+        || repl.status().activity == ReplicatorActivityLevel::Stopped,
+        max_wait_seconds,
+    )
+}
+
 pub fn check_callback_with_wait<CB>(mut callback: CB, max_wait_seconds: Option<u64>) -> bool
 where
     CB: FnMut() -> bool,

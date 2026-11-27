@@ -917,6 +917,9 @@ fn encryption_error_permanent() {
     });
 
     tester.test(|local_db, central_db, repl| {
+        // Make sure the previous one-shot replication is over, otherwise `start` is a no-op
+        assert!(utils::wait_for_replicator_stopped(repl, None));
+
         // Create new revision for document 'foo' in local
         let mut doc = default_collection(local_db).get_document("foo").unwrap();
         let mut props = doc.mutable_properties();
@@ -1000,6 +1003,9 @@ fn decryption_error_permanent() {
     });
 
     tester.test(|local_db, central_db, repl| {
+        // Make sure the previous one-shot replication is over, otherwise `start` is a no-op
+        assert!(utils::wait_for_replicator_stopped(repl, None));
+
         // Create new revision for document 'foo' in central
         let mut doc = default_collection(central_db).get_document("foo").unwrap();
         let mut props = doc.mutable_properties();
